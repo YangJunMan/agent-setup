@@ -1,0 +1,11 @@
+{
+  "model": "opus",
+  "effortLevel": "medium",
+  "theme": "dark",
+  "autoCompactEnabled": true,
+  "extraKnownMarketplaces": {
+    "karpathy-skills": {
+      "source": { "source": "github", "repo": "forrestchang/andrej-karpathy-skills" }
+    }
+  }
+}
