@@ -1,40 +1,45 @@
 #!/usr/bin/env sh
-# Install the agent rules where Claude Code and Codex already look for them.
-# Nothing is cloned and no symlinks are created; re-run to update.
+# Copy shared rules into a project; use --update after reviewing conflicts.
 set -eu
-
-BASE="${AGENT_SETUP_BASE:-https://raw.githubusercontent.com/YangJunMan/agent-setup/main}"
-CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
-SHARED="$HOME/.config/agent-setup"
-TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
-
-fetch() { curl -fsSL "$BASE/$1" -o "$TMP/$2"; }
-
-put() { # put <staged-file> <destination>
-  [ -L "$2" ] && rm "$2"                 # never write through a symlink
-  [ -f "$2" ] && cp "$2" "$2.bak"        # keep whatever was there before
-  mkdir -p "$(dirname "$2")"
-  cp "$TMP/$1" "$2"
-  echo "  $2"
-}
-
-# Stage every file first: a failed download must not leave a half-installed set.
-fetch AGENTS.md                  rules.md
-fetch DISCUSSION_RULES.md        discussion.md
-fetch claude/commands/discuss.md discuss-cmd.md
-
-echo "Installing agent rules:"
-# Codex has no include mechanism and reads only its own path, so the rules are
-# copied to both. One download, two destinations, verified identical below.
-put rules.md      "$HOME/.claude/CLAUDE.md"
-put rules.md      "$CODEX_HOME/AGENTS.md"
-put discussion.md "$SHARED/DISCUSSION_RULES.md"
-put discuss-cmd.md "$HOME/.claude/commands/discuss.md"
-
-cmp -s "$HOME/.claude/CLAUDE.md" "$CODEX_HOME/AGENTS.md" \
-  || { echo "ERROR: the two copies differ" >&2; exit 1; }
-
-echo "Done. Claude Code and Codex pick these up in every directory."
-echo "Antigravity reads no user-level file; in a project it should follow, run:"
-echo "  curl -fsSL $BASE/AGENTS.md -o AGENTS.md"
+base="${AGENT_SETUP_BASE:-https://raw.githubusercontent.com/YangJunMan/agent-setup/main}"
+update=0
+if [ "${1:-}" = "--update" ]; then update=1; shift; fi
+[ "$#" -le 1 ] || { echo "Usage: install.sh [--update] [PROJECT_DIR]" >&2; exit 2; }
+target="${1:-.}"
+[ -d "$target" ] || { echo "No such directory: $target" >&2; exit 1; }
+target=$(cd "$target" && pwd -P)
+root=$(git -C "$target" rev-parse --show-toplevel 2>/dev/null || true)
+if [ -n "$root" ] && [ "$target" != "$(cd "$root" && pwd -P)" ]; then
+  echo "Run from the repository root: $root" >&2; exit 1
+fi
+[ ! -L "$target/.agent" ] && { [ ! -e "$target/.agent" ] || [ -d "$target/.agent" ]; } \
+  || { echo "Refusing non-directory or symlink: $target/.agent" >&2; exit 1; }
+stage=$(mktemp -d)
+trap 'rm -rf "$stage"' EXIT
+mkdir "$stage/.agent"
+files="AGENTS.md CLAUDE.md .agent/DISCUSSION_RULES.md"
+for file in $files; do
+  curl -fsSL "$base/$file" -o "$stage/$file"
+  [ -s "$stage/$file" ] || { echo "Empty download: $file" >&2; exit 1; }
+done
+conflict=0
+for file in $files; do
+  dst="$target/$file"
+  if [ -L "$dst" ] || { [ -e "$dst" ] && [ ! -f "$dst" ]; }; then
+    echo "Refusing non-file or symlink: $dst" >&2; exit 1
+  fi
+  if [ -f "$dst" ] && ! cmp -s "$stage/$file" "$dst"; then
+    diff -u "$dst" "$stage/$file" || [ "$?" -eq 1 ]
+    conflict=1
+  fi
+done
+if [ "$conflict" = 1 ] && [ "$update" = 0 ]; then
+  echo "No files changed. Review the diff, then use --update."
+  echo "Preserve project-specific edits before replacing the managed files."
+  exit 1
+fi
+mkdir -p "$target/.agent"
+for file in $files; do
+  if ! cmp -s "$stage/$file" "$target/$file"; then cp "$stage/$file" "$target/$file"; fi
+done
+echo "Installed three rule files in $target. Start a new agent session."

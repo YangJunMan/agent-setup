@@ -4,9 +4,9 @@ Be brief. Answer only what matters; no preamble, no restated summary, no CoT.
 Respond in Korean, keeping technical terms, commands, config keys, and product
 names in English.
 
-For a review or discussion involving more than one agent, read
-`DISCUSSION_RULES.md` — from the project root if present, otherwise
-`~/.config/agent-setup/DISCUSSION_RULES.md` — and follow it. Not for ordinary coding work.
+For discussions, architecture decisions, trade-off analysis, or reviews involving
+more than one agent, read `.agent/DISCUSSION_RULES.md` from the project root
+and follow it. Load it only when relevant, not for ordinary coding work.
 
 Facts specific to one project belong in that project's own instruction file.
 

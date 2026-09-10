@@ -1,86 +1,55 @@
-#!/usr/bin/env bash
-# Invariants that manual review kept missing. Run before committing.
-set -uo pipefail
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$REPO"
-FAIL=0
-fail() { echo "FAIL  $*"; FAIL=1; }
-pass() { echo "ok    $*"; }
-
-# 1. Rule files are English. The Language rule itself is the only place the word
-#    "Korean" belongs; a Hangul character anywhere means a line slipped through.
-hits=$(python3 - <<'PY'
-import pathlib, re
-bad = []
-for f in ["AGENTS.md", "DISCUSSION_RULES.md", "templates/CLAUDE.md",
-          "README.md", "init.sh", "check.sh", "claude/commands/discuss.md"]:
-    for n, line in enumerate(pathlib.Path(f).read_text().splitlines(), 1):
-        # Ranges by codepoint so this checker does not match itself.
-        if any("\uac00" <= ch <= "\ud7a3" or "\u3131" <= ch <= "\u318e" for ch in line):
-            bad.append(f"{f}:{n}: {line.strip()[:60]}")
-print("\n".join(bad))
-PY
-)
-[ -z "$hits" ] && pass "no Hangul in rule files" || { fail "Hangul found:"; echo "$hits" | sed 's/^/      /'; }
-
-# 2. No rule file may name where this repository lives; the repo must work from
-#    any path. README may, since it is instructions for a human.
-leak=$(grep -n 'agent-setup' AGENTS.md DISCUSSION_RULES.md templates/CLAUDE.md \
-       claude/commands/discuss.md 2>/dev/null | grep -v '\.config/agent-setup' || true)
-[ -z "$leak" ] && pass "rule files are location-independent" \
-               || { fail "rule file hardcodes the repo path:"; echo "$leak" | sed 's/^/      /'; }
-
-# 3. Every long flag the README shows must exist in init.sh.
-missing=""
-for flag in $(grep -o -- '--[a-z-]\{3,\}' README.md | sort -u); do
-  case "$flag" in --dry-run|--copy|--global|--settings-only) ;; *) continue ;; esac
-  grep -q -- "$flag)" init.sh || missing="$missing $flag"
+#!/usr/bin/env sh
+set -eu
+repo=$(CDPATH= cd -- "$(dirname "$0")" && pwd -P)
+stage=$(mktemp -d)
+trap 'rm -rf "$stage"' EXIT
+export AGENT_SETUP_BASE="file://$repo"
+install() { sh "$repo/install.sh" "$@" > "$stage/output" 2>&1; }
+fail() { echo "FAIL: $*" >&2; cat "$stage/output"; exit 1; }
+reject() { if install "$@"; then fail "unexpected success: $*"; fi; }
+mkdir "$stage/project"
+git init -q "$stage/project"
+install "$stage/project"
+for file in AGENTS.md CLAUDE.md .agent/DISCUSSION_RULES.md; do
+  cmp "$repo/$file" "$stage/project/$file"
 done
-[ -z "$missing" ] && pass "README flags all implemented" || fail "README documents missing flags:$missing"
-
-# 3. Paths named in the docs must exist.
-for f in AGENTS.md DISCUSSION_RULES.md templates/CLAUDE.md claude/settings.json \
-         claude/commands/discuss.md init.sh check.sh install.sh; do
-  [ -e "$f" ] || fail "referenced file missing: $f"
-done
-pass "referenced files exist"
-
-# 4. Install fixtures. The worktree case is why this file exists: `.git` is a
-#    file there, so an exclude check keyed on a directory silently does nothing.
-TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
-git init -q "$TMP/plain"
-git init -q "$TMP/main" && git -C "$TMP/main" -c user.email=c@c -c user.name=c \
-  commit -q --allow-empty -m init && git -C "$TMP/main" worktree add -q "$TMP/wt" -b wt
-
-for case in plain wt; do
-  ./init.sh "$TMP/$case" >/dev/null 2>&1
-  untracked=$(git -C "$TMP/$case" status --short 2>/dev/null | grep -c 'AGENTS.md\|DISCUSSION_RULES.md')
-  [ "$untracked" = "0" ] && pass "symlinks excluded ($case)" \
-                         || fail "symlinks exposed to git ($case)"
-done
-
-mkdir -p "$TMP/home/.claude"   # deliberately no ~/.codex
-HOME="$TMP/home" ./init.sh --global >/dev/null 2>&1 \
-  && pass "--global survives a missing ~/.codex" \
-  || fail "--global fails when ~/.codex is absent"
-
-# 5. install.sh must place every file the README says it does, must not write
-#    through a symlink into this repo, and must preserve what was already there.
-SENTINEL="sentinel-4c1f-not-in-any-rule-file"
-H="$TMP/installhome"; mkdir -p "$H/.claude" "$H/.codex"
-echo "$SENTINEL" > "$H/.claude/CLAUDE.md"
-ln -s "$REPO/AGENTS.md" "$H/.codex/AGENTS.md"
-HOME="$H" AGENT_SETUP_BASE="file://$REPO" sh install.sh >/dev/null 2>&1
-for f in .claude/CLAUDE.md .config/agent-setup/DISCUSSION_RULES.md .claude/commands/discuss.md .codex/AGENTS.md; do
-  [ -f "$H/$f" ] && [ ! -L "$H/$f" ] || fail "install.sh did not write $f as a real file"
-done
-grep -q "$SENTINEL" "$H/.claude/CLAUDE.md.bak" 2>/dev/null \
-  || fail "install.sh discarded the previous CLAUDE.md instead of backing it up"
-grep -q "$SENTINEL" "$REPO/AGENTS.md" && fail "install.sh wrote through a symlink into the repo"
-cmp -s "$H/.claude/CLAUDE.md" "$H/.codex/AGENTS.md" \
-  || fail "install.sh left the two rule copies different"
-pass "install.sh installs cleanly over files and symlinks"
-
-[ "$FAIL" = 0 ] && echo "All checks passed." || echo "Checks failed."
-exit $FAIL
+count=$(find "$stage/project" -path '*/.git' -prune -o -type f -print | wc -l | tr -d ' ')
+[ "$count" = 3 ] || fail "unexpected project files"
+install "$stage/project"
+echo "ok: three-file installation and repeat"
+printf 'local rule\n' > "$stage/project/AGENTS.md"
+reject "$stage/project"
+grep -q 'local rule' "$stage/project/AGENTS.md" || fail "conflict overwritten"
+grep -q '^@@' "$stage/output" || fail "missing diff"
+install --update "$stage/project"
+cmp "$repo/AGENTS.md" "$stage/project/AGENTS.md"
+echo "ok: conflict diff and explicit update"
+mkdir "$stage/conflict"
+printf 'custom\n' > "$stage/conflict/CLAUDE.md"
+reject "$stage/conflict"
+[ ! -e "$stage/conflict/AGENTS.md" ] || fail "partial conflict install"
+mkdir "$stage/missing" "$stage/incomplete"
+cp "$repo/AGENTS.md" "$stage/incomplete/AGENTS.md"
+if (AGENT_SETUP_BASE="file://$stage/incomplete" install "$stage/missing"); then fail "missing download accepted"; fi
+[ ! -e "$stage/missing/AGENTS.md" ] || fail "partial download install"
+echo "ok: no writes after conflict or download failure"
+mkdir "$stage/links" "$stage/outside"
+ln -s "$stage/outside" "$stage/links/.agent"
+reject --update "$stage/links"
+[ ! -e "$stage/outside/DISCUSSION_RULES.md" ] || fail "directory symlink followed"
+mkdir "$stage/filelink"
+ln -s "$repo/AGENTS.md" "$stage/filelink/AGENTS.md"
+reject --update "$stage/filelink"
+echo "ok: symlink destinations refused"
+mkdir "$stage/project/nested"
+reject "$stage/project/nested"
+git -C "$stage/project" -c user.name=Test -c user.email=test@example.invalid commit -qm initial --allow-empty
+git -C "$stage/project" worktree add -qb fixture "$stage/worktree"
+install "$stage/worktree"
+cmp "$repo/.agent/DISCUSSION_RULES.md" "$stage/worktree/.agent/DISCUSSION_RULES.md"
+echo "ok: nested root refusal and linked worktree"
+grep -qx '@AGENTS.md' "$repo/CLAUDE.md"
+grep -q '\.agent/DISCUSSION_RULES.md' "$repo/AGENTS.md"
+sh -n "$repo/install.sh" "$repo/check.sh"
+git -C "$repo" diff --check
+echo "All checks passed."

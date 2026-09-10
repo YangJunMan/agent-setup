@@ -1,6 +1,7 @@
 # Multi-Model Discussion Rules
 
-Scope: multi-model review only. Not ordinary coding work.
+Scope: discussions, architecture decisions, and trade-off analysis. Apply the
+multi-model reviewer and round rules only when multiple reviewers are involved.
 Be brief everywhere below — in payloads, in reviews, in rebuttals.
 
 ## Payload
