@@ -1,64 +1,104 @@
 # agent-setup
 
-Shared project instructions. One copy installer; no clone, symlinks,
-global configuration, or background synchronization.
-
-## Install
-
-Run from the target project root:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/YangJunMan/agent-setup/main/install.sh | sh
-```
-
-Only these three files are installed:
+코딩·비판적 검토·문서·엔지니어링 기록에 대한 재사용 가능한 agent 규칙 모음.
+Markdown 파일을 대상 프로젝트에 복사하면 끝이고, installer는 없다.
 
 ```text
 project/
-├── AGENTS.md
-├── CLAUDE.md
+├── AGENTS.md                     # 복사함 · 항상 로드됨
+├── CLAUDE.md                     # 복사함 · @AGENTS.md import
+├── README.md                     # 복사하지 않음 · 이 문서, 이 저장소 전용
 └── .agent/
-    └── DISCUSSION_RULES.md
+    ├── DISCUSSION_RULES.md       # 복사함 · 명시적 요청 시에만 로드
+    ├── DOCUMENTATION_RULES.md    # 복사함 · 문서·기록 작업 시에만 로드
+    └── ENGINEERING_LOG.md        # 복사하지 않음 · 프로젝트가 생성·소유
 ```
 
-- `AGENTS.md`: shared working rules and conditional discussion-rule loading.
-- `CLAUDE.md`: imports `@AGENTS.md`.
-- `.agent/DISCUSSION_RULES.md`: discussion, architecture decisions, and
-  trade-off analysis. Multi-reviewer steps apply only when multiple reviewers
-  participate.
+| 파일 | 역할 | 로드 조건 |
+|---|---|---|
+| `AGENTS.md` | 코딩 4원칙, 응답 규칙, 나머지 규칙의 로드 조건 | 항상 |
+| `CLAUDE.md` | `@AGENTS.md` 한 줄 | 항상 |
+| `DISCUSSION_RULES.md` | 기존 제안에 대한 증거 기반 다중 모델 검토 | 사용자가 검토·토론을 명시 요청할 때 |
+| `DOCUMENTATION_RULES.md` | 문서 작성법과 engineering log 작성법 | 문서 신규 작성·구조 변경·기록 작성 시 |
 
-The working rules retain the
-[Karpathy Guidelines](https://x.com/karpathy/status/2015883857489522876)
-reference used by this repository. Installation distributes instructions;
-agent-specific loading and adherence must be verified in a new session.
-Antigravity compatibility has not been runtime-verified here.
+이 문서와 `.agent/ENGINEERING_LOG.md`는 규칙이 아니며 agent가 자동으로 읽지
+않는다.
 
-## Update
+핵심 설계는 **조건부 로드**다. 모든 규칙을 `AGENTS.md`에 넣으면 사소한 작업에도
+전부 context에 올라간다. 자주 필요한 것만 상주시키고 나머지는 필요할 때 읽는다.
 
-Re-running installation keeps identical files. If existing files differ,
-it shows a diff and exits without writing anything. After reviewing:
+## 적용
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/YangJunMan/agent-setup/main/install.sh | sh -s -- --update
-```
+위 트리에서 "복사함"으로 표시된 네 파일만 프로젝트로 가져간다. 이 README는
+이 저장소를 설명하는 문서이므로 복사하지 않는다 — 대상 프로젝트의 README를
+덮어쓰지 않도록 주의한다. 저장소를 통째로 clone했다면 이 파일과
+`.agent/ENGINEERING_LOG.md`를 지운다.
 
-`--update` replaces all differing managed files, including local edits.
-Commit or otherwise preserve project-specific changes first; no backups
-are created. Symlink and non-file destinations are refused even with
-`--update`. All downloads and destination checks finish before copying.
-A later filesystem write failure is not automatically rolled back.
+`AGENTS.md`와 `CLAUDE.md`는 Codex와 Claude Code의 관례 파일명이라 대상
+프로젝트에 이미 있을 가능성이 높다. 덮어쓰지 말고, 프로젝트 고유 지시는
+남긴 채 원칙 부분만 교체한다. 갱신할 때도 diff를 확인하고 의도한 변경만
+가져간다.
 
-Existing global installations and legacy project files are not migrated or
-removed. Review them separately to avoid duplicate instructions.
-Changes to this repository are presented for user review before pushing.
+`ENGINEERING_LOG.md`는 의미 있는 사건이 생겼을 때 각 프로젝트에서 agent가
+만든다. 해당 프로젝트의 소유물이며 공유 규칙도, 갱신 대상도 아니다.
 
-## Local development
+스크립트, 백그라운드 동기화, 추가 도구 설치는 필요 없다.
 
-```sh
-AGENT_SETUP_BASE="file://$PWD" sh install.sh /path/to/project
-sh check.sh
-```
+### 전역 fallback 주의
 
-`install.sh`, `check.sh`, and this README stay in this source repository;
-they are not copied to projects. Checks cover file layout, repeat installs,
-conflicts, explicit updates, failed downloads, symlinks, and linked worktrees.
+전역 규칙 파일이 fallback 사본(현재 `~/.config/agent-setup/DISCUSSION_RULES.md`)을
+가리킬 수 있다. 프로젝트에 `.agent/DISCUSSION_RULES.md`가 없을 때 이 사본이
+로드되므로, 이 저장소의 파일과 항상 동일하게 유지해야 한다. 그러지 않으면
+구버전 규칙이 대신 실행된다. 실제로 이 문제가 한 번 발생했다.
+
+파일을 놓았다고 규칙이 지켜지는 것은 아니다. 새 세션을 열어 어떤 규칙이 실제로
+로드되는지 확인하라.
+
+## 왜 이렇게 만들었는가
+
+각 규칙은 취향이 아니라 실제로 겪은 실패에 대한 대응이다.
+
+### 토론 — 비용은 agent 사이를 건너가는 것에서 발생한다
+
+계약 없이 두 agent에게 "토론하라"고 시켰더니 서로에게 자기 context 전체를
+넘겼다. grep 출력, tool call 기록, 중간 사고 과정, 이전 대화 전부다. 한두
+라운드만에 토큰이 소진됐고, 넘어간 내용의 대부분은 결정과 아무 관련이 없었다.
+
+그래서 **사고를 제한하는 대신 인터페이스를 제한했다.**
+
+- payload를 고정했다. 결정 하나, 제약, 판단 기준, 증거는 경로로. 30줄 이내.
+  파일 내용 대신 경로를 보내고, 리뷰어가 파일을 읽을 수 없을 때만 발췌한다.
+- 리뷰어 출력도 고정했다. verdict, 한 줄짜리 finding 최대 5개, 불확실성.
+  그 외에는 아무것도 돌아오지 않는다.
+- 반박에는 이견이 있는 주장만 싣는다. 리뷰 전체를 다시 보내지 않는다.
+  1라운드, 새 증거가 있을 때만 2라운드.
+- 리뷰어는 one-shot이고, orchestrator는 synthesis마다 compact한다.
+  2라운드가 1라운드의 transcript를 짊어지지 않도록.
+
+규칙 파일 자체도 작지만 절감은 거기서 나오지 않는다. **transcript가 agent
+경계를 넘지 않게 하는 것**에서 나온다.
+
+### 코딩 — 효과가 관찰되는 것만 남긴다
+
+`AGENTS.md`는 [Karpathy Guidelines](https://x.com/karpathy/status/2015883857489522876)의
+네 원칙을 유지한다. 고민 후 코딩, 단순함 우선, 최소 침습 수정, 목표 기반 실행.
+이 원칙들은 효과가 diff에 드러나기 때문에 남겼다. 요청하지 않은 변경이 줄고,
+과도한 복잡화가 줄고, 질문이 구현 이후의 재작업이 아니라 구현 이전에 나온다.
+
+축약 기준은 "행동을 바꾸는가"였다. 일반적인 글쓰기 조언은 뺐고, 행동을 바꾸는
+세부 — 기존 dead code는 삭제하지 말고 언급할 것, 다 쓴 코드를 다시 읽고
+줄일 것, 계획의 각 단계마다 검증을 붙일 것 — 는 남겼다.
+
+이 저장소의 이전 리라이트에서 그 세부 중 몇 개가 조용히 사라졌고 나중에
+복원해야 했다. 압축은 할 만한 가치가 있지만, 반드시 원본과 대조해야 한다.
+
+### 문서 — 싸게 읽히도록 쓴다
+
+프로젝트 문서는 정보가 없는 토큰을 쌓는다. 반복된 요약, 빈 템플릿, 되풀이되는
+메타데이터, 근거 없는 수식어. 그 파일을 여는 모든 agent가 그 비용을 매번 다시
+치른다.
+
+그래서 규칙은 **AI가 싸게 읽을 수 있는 문서**를 목표로 한다. 목적을 먼저 쓰고,
+하나의 사실은 한 곳에만 두고, 재현에 필요한 증거는 남기고, 나머지는 덜어낸다.
+engineering log 항목은 12줄로 제한한다. 결과적으로 이 목표는 사람이 읽기 쉬운
+문서의 조건과 같다.
