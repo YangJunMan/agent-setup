@@ -9,6 +9,11 @@
 2. 같은 이름의 파일이 있다면 diff를 확인하고, 프로젝트 고유 지시를 보존하며 반영한다.
 3. 새 agent 세션에서 어떤 규칙이 실제로 로드되는지 확인한다.
 
+```
+curl -fsSL "https://github.com/YangJunMan/agent-setup/archive/refs/heads/main.tar.gz" \
+  | tar -xz --strip-components=1 --exclude='*README.md*' --exclude='*readme.md*' -C ./
+```
+
 ```text
 project/
 ├── AGENTS.md
