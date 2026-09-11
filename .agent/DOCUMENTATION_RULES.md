@@ -16,7 +16,9 @@ record. Not for small edits within an existing document.
 - Before finishing, check references, contradictions, and duplication.
 
 ## Engineering Log
-Write to `.agent/ENGINEERING_LOG.md`. AGENTS.md decides when.
+Write to `.agent/ENGINEERING_LOG/{repo}_{YYYY-MM-DD}_LOG.md`, where `{repo}`
+is the repository's directory/name. Same date → append to that day's file.
+New date → create a new file. AGENTS.md decides when to write.
 
 - Korean, technical identifiers unchanged. Dated heading, at most 12 lines per
   entry, only the applicable fields: Problem; Attempts and evidence; Decision

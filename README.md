@@ -23,7 +23,8 @@ project/
 **복사하지 않는 파일**
 
 - `README.md`: 이 저장소의 안내 문서다. 대상 프로젝트의 README를 덮어쓰지 않는다.
-- `.agent/ENGINEERING_LOG.md`: 각 프로젝트의 작업 기록이다. 의미 있는 사건이 생기면 해당 프로젝트에서 agent가 생성하며, 공유·갱신 대상에 포함하지 않는다.
+- `.agent/ENGINEERING_LOG/`: 각 프로젝트의 작업 기록이다. 의미 있는 사건이 생기면 해당 프로젝트에서 agent가 날짜별 파일(`{repo}_{YYYY-MM-DD}_LOG.md`)로 생성하며, 공유·갱신 대상에 포함하지 않는다.
+  (참고: 이 문구는 agent-setup → 신규 프로젝트로의 파일 복사 대상에서 제외한다는 뜻이며, 각 프로젝트에 이미 존재하는 로그를 `record` 저장소로 자동 수집하는 별도 자동화(GitHub App + Cloudflare Worker)와는 무관하다. 해당 자동화는 이미 push된 커밋만 읽으며 원본 저장소에 어떤 것도 stage·commit·push하지 않는다.)
 
 이 저장소를 통째로 clone해 새 프로젝트의 출발점으로 사용했다면, 가져온 README와 engineering log는 제거한다. 기존 프로젝트의 문서와 기록은 보존한다.
 

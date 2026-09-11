@@ -46,6 +46,6 @@ These rules bias toward caution over speed. For a trivial task, use judgment.
   record: read `.agent/DOCUMENTATION_RULES.md`. Small edits within an existing
   document do not need it.
 - Record meaningful investigation, failed experiments, explicit user decisions,
-  and design reversals in `.agent/ENGINEERING_LOG.md`. Skip routine edits.
+  and design reversals in `.agent/ENGINEERING_LOG/`. Skip routine edits.
   Read-only requests get a proposed entry in the response instead. Logging does
   not authorize commit or push.
